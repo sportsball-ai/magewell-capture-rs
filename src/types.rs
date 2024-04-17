@@ -1,5 +1,9 @@
 use super::sys;
-use std::{ffi::CStr, time::Duration};
+use std::{ffi::CStr, os::raw::c_char, time::Duration};
+
+fn bytes_to_cstr(bytes: &[c_char]) -> &CStr {
+    unsafe { CStr::from_ptr(bytes.as_ptr()) }
+}
 
 pub struct ChannelInfo {
     inner: sys::MWCAP_CHANNEL_INFO,
@@ -15,19 +19,19 @@ impl ChannelInfo {
     }
 
     pub fn board_serial_number(&self) -> &CStr {
-        CStr::from_bytes_until_nul(&self.inner.szBoardSerialNo).expect("invalid serial number")
+        bytes_to_cstr(&self.inner.szBoardSerialNo)
     }
 
     pub fn firmware_name(&self) -> &CStr {
-        CStr::from_bytes_until_nul(&self.inner.szFirmwareName).expect("invalid firmware name")
+        bytes_to_cstr(&self.inner.szFirmwareName)
     }
 
     pub fn product_name(&self) -> &CStr {
-        CStr::from_bytes_until_nul(&self.inner.szProductName).expect("invalid product name")
+        bytes_to_cstr(&self.inner.szProductName)
     }
 
     pub fn family_name(&self) -> &CStr {
-        CStr::from_bytes_until_nul(&self.inner.szFamilyName).expect("invalid family name")
+        bytes_to_cstr(&self.inner.szFamilyName)
     }
 
     pub fn firmware_version(&self) -> (u16, u16) {
@@ -40,8 +44,10 @@ impl ChannelInfo {
         ((v >> 24) as _, (v >> 16) as _, v as _)
     }
 
+    // The cast is necessary on some targets (e.g. x86_64-unknown-linux-gnu), but not others.
+    #[allow(clippy::unnecessary_cast)]
     pub fn hardware_version(&self) -> char {
-        self.inner.chHardwareVersion as _
+        self.inner.chHardwareVersion as u8 as _
     }
 }
 
