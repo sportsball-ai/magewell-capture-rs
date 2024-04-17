@@ -1,0 +1,28 @@
+1.install
+Ubuntu 
+sudo apt-get install zlib1g-dev
+sudo apt-get install libv4l-dev
+sudo apt-get install libasound2-dev
+sudo apt-get install libudev-dev
+sudo apt-get install libva-dev
+Centos 
+sudo yum install libv4l-devel
+sudo yum install libudev-devel
+sudo yum install alsa-lib-devel
+sudo yum install libva-devel
+
+
+
+2.bulid demo
+cd Examples/C++/CmdTools/XXXX 
+or
+cd Examples/C++/GUI/XXXX
+
+make
+
+3.generate shared lib
+cd Lib
+sh gen_shared.sh
+
+4.run example without sudo
+copy /Lib/189-usbdev.rules to dir /etc/udev/rules.d
