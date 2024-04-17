@@ -2,6 +2,7 @@ use nix::sys::eventfd::EventFd;
 use snafu::prelude::*;
 use std::{
     mem::MaybeUninit,
+    ops::Deref,
     os::{
         fd::AsRawFd,
         raw::{c_longlong, c_void},
@@ -85,6 +86,22 @@ pub enum Channel {
     Pro(ProChannel),
 }
 
+struct ChannelHandle(*mut c_void);
+
+impl Deref for ChannelHandle {
+    type Target = *mut c_void;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for ChannelHandle {
+    fn drop(&mut self) {
+        unsafe { sys::MWCloseChannel(self.0) };
+    }
+}
+
 impl Channel {
     /// Opens an Eco or Pro device based on the board and channel index.
     pub fn open(board_index: u8, channel_index: u8) -> Result<Self> {
@@ -107,15 +124,15 @@ impl Channel {
             if handle.is_null() {
                 whatever!("unable to open channel");
             }
-            handle
+            ChannelHandle(handle)
         };
 
         let info: ChannelInfo = {
             let mut info = MaybeUninit::uninit();
             unsafe {
-                if sys::MWGetChannelInfo(handle, info.as_mut_ptr()) != sys::_MW_RESULT__MW_SUCCEEDED
+                if sys::MWGetChannelInfo(*handle, info.as_mut_ptr())
+                    != sys::_MW_RESULT__MW_SUCCEEDED
                 {
-                    sys::MWCloseChannel(handle);
                     whatever!("unable to get channel info");
                 }
                 info.assume_init().into()
@@ -185,7 +202,7 @@ impl UniversalCaptureFamily for Channel {
 }
 
 pub struct EcoChannel {
-    handle: *mut c_void,
+    handle: ChannelHandle,
     info: ChannelInfo,
     event_fd: EventFd,
     // hold onto a reference of the currently set capture frame
@@ -194,7 +211,7 @@ pub struct EcoChannel {
 
 impl UniversalCaptureFamily for EcoChannel {
     fn handle(&self) -> *mut c_void {
-        self.handle
+        *self.handle
     }
 
     fn info(&self) -> &ChannelInfo {
@@ -233,6 +250,9 @@ impl EcoChannel {
     }
 
     pub fn set_video_capture_frame(&mut self, frame: EcoVideoCaptureFrame) -> Result<()> {
+        if self.video_capture_frame.is_some() {
+            whatever!("video frame already set");
+        }
         let mut frame = Box::pin(frame);
         unsafe {
             if sys::MWCaptureSetVideoEcoFrame(self.handle(), frame.as_mut_ptr())
@@ -270,7 +290,7 @@ impl EcoChannel {
             .event_fd
             .read()
             .whatever_context("unable to read eventfd")?
-            >= (1 << 32)
+            == 0
         {
             whatever!("error event received");
         }
@@ -278,20 +298,14 @@ impl EcoChannel {
     }
 }
 
-impl Drop for EcoChannel {
-    fn drop(&mut self) {
-        unsafe { sys::MWCloseChannel(self.handle) };
-    }
-}
-
 pub struct ProChannel {
-    handle: *mut c_void,
+    handle: ChannelHandle,
     info: ChannelInfo,
 }
 
 impl UniversalCaptureFamily for ProChannel {
     fn handle(&self) -> *mut c_void {
-        self.handle
+        *self.handle
     }
 
     fn info(&self) -> &ChannelInfo {
@@ -300,12 +314,6 @@ impl UniversalCaptureFamily for ProChannel {
 }
 
 impl ProEcoCaptureFamily for ProChannel {}
-
-impl Drop for ProChannel {
-    fn drop(&mut self) {
-        unsafe { sys::MWCloseChannel(self.handle) };
-    }
-}
 
 // Theses tests will pass if there are no devices present, but to really get their full value, an
 // Eco device should be present and channel 0:0 should be connected to a video source.

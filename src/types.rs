@@ -117,13 +117,13 @@ impl From<sys::MWCAP_VIDEO_SIGNAL_STATUS> for VideoSignalStatus {
 
 pub struct EcoVideoCaptureFrame {
     // XXX: `_buf` is referenced by `inner`!
-    buf: Vec<u8>,
+    buf: Box<[u8]>,
     inner: sys::_MWCAP_VIDEO_ECO_CAPTURE_FRAME,
 }
 
 impl EcoVideoCaptureFrame {
     pub fn new(size: usize, stride: usize) -> Self {
-        let mut buf = vec![0; size];
+        let mut buf = vec![0; size].into_boxed_slice();
         Self {
             inner: sys::_MWCAP_VIDEO_ECO_CAPTURE_FRAME {
                 pvFrame: buf.as_mut_ptr() as _,
