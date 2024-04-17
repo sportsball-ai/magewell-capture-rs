@@ -1,0 +1,23 @@
+name: Push
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set Up Linux
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libv4l-dev libudev-dev libasound2-dev
+    - uses: actions/checkout@v1
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@1.77.2
+      with:
+        components: clippy
+    - name: Build
+      run: cargo build --verbose
+    - name: Test
+      run: cargo test --verbose
+    - name: Lint
+      run: cargo clippy
