@@ -6,6 +6,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Set Up Linux
+      run: |
+        apt-get update
+        apt-get install -y libv4l-dev libudev-dev libasound2-dev
     - uses: actions/checkout@v1
     - name: Install Rust
       uses: actions-rs/toolchain@v1
