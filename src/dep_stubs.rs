@@ -25,39 +25,29 @@ macro_rules! return_expr {
 // Creates a stub that always returns null.
 macro_rules! return_null {
     ($name:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> *mut std::ffi::c_void {
-            // Want to see when this is called? Uncomment the following line.
-            //println!("{} called", stringify!($name));
-            std::ptr::null_mut()
-        }
+        return_expr!($name, *mut std::ffi::c_void, std::ptr::null_mut());
     };
 }
 
 // Creates a stub with no return value.
 macro_rules! return_void {
     ($name:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() {
-            // Want to see when this is called? Uncomment the following line.
-            //println!("{} called", stringify!($name));
-        }
+        return_expr!($name, (), ());
     };
 }
 
 // Creates a stub that always returns a negative system error code.
 macro_rules! return_error {
     ($name:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> std::ffi::c_int {
-            // Want to see when this is called? Uncomment the following line.
-            //println!("{} called", stringify!($name));
-            -(nix::errno::Errno::ENOENT as std::ffi::c_int)
-        }
+        return_expr!(
+            $name,
+            std::ffi::c_int,
+            -(nix::errno::Errno::ENOSYS as std::ffi::c_int)
+        );
     };
 }
 
-mod no_v4l2 {
+mod v4l2_stubs {
     use std::ffi::c_void;
 
     return_error!(v4l2_open);
@@ -67,7 +57,7 @@ mod no_v4l2 {
     return_error!(v4l2_munmap);
 }
 
-mod no_udev {
+mod udev_stubs {
     return_null!(udev_new);
     return_null!(udev_unref);
     return_null!(udev_enumerate_new);
@@ -93,7 +83,7 @@ mod no_udev {
     return_error!(udev_monitor_filter_add_match_subsystem_devtype);
 }
 
-mod no_usb {
+mod usb_stubs {
     use std::ffi::c_int;
 
     const NOT_SUPPORTED: c_int = 12;
@@ -119,7 +109,7 @@ mod no_usb {
     return_expr!(libusb_release_interface, c_int, NOT_SUPPORTED);
 }
 
-mod no_asound {
+mod asound_stubs {
     use std::ffi::{c_int, c_long};
 
     return_error!(snd_card_next);

@@ -1,4 +1,7 @@
-use super::{sys, ChannelHandle, ChannelInfo, ProEcoCaptureFamily, Result, UniversalCaptureFamily};
+use super::{
+    sys, ChannelHandle, ChannelInfo, ProEcoCaptureFamilyChannel, Result,
+    UniversalCaptureFamilyChannel,
+};
 use snafu::prelude::*;
 use std::ffi::c_void;
 
@@ -28,7 +31,7 @@ impl ProChannel {
     }
 }
 
-impl UniversalCaptureFamily for ProChannel {
+unsafe impl UniversalCaptureFamilyChannel for ProChannel {
     fn handle(&self) -> *mut c_void {
         *self.handle
     }
@@ -38,7 +41,7 @@ impl UniversalCaptureFamily for ProChannel {
     }
 }
 
-impl ProEcoCaptureFamily for ProChannel {
+unsafe impl ProEcoCaptureFamilyChannel for ProChannel {
     fn event(&self) -> sys::MWCAP_PTR {
         self.event
     }

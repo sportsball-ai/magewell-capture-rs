@@ -17,8 +17,8 @@ pub mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-#[cfg(feature = "no-deps")]
-mod no_deps;
+#[cfg(feature = "dep-stubs")]
+mod dep_stubs;
 
 mod fourcc;
 pub use fourcc::*;
@@ -156,7 +156,7 @@ impl Channel {
     }
 }
 
-impl UniversalCaptureFamily for Channel {
+unsafe impl UniversalCaptureFamilyChannel for Channel {
     fn handle(&self) -> *mut c_void {
         match self {
             Channel::Eco(ch) => ch.handle(),
@@ -172,7 +172,7 @@ impl UniversalCaptureFamily for Channel {
     }
 }
 
-impl ProEcoCaptureFamily for Channel {
+unsafe impl ProEcoCaptureFamilyChannel for Channel {
     fn event(&self) -> sys::MWCAP_PTR {
         match self {
             Channel::Eco(ch) => ch.event(),
@@ -236,7 +236,7 @@ mod tests {
         {
             ch.start_audio_capture().unwrap();
             let notify_handle = ch
-                .register_notify(sys::MWCAP_NOTIFY_AUDIO_FRAME_BUFFERED)
+                .register_notify(NotifyEvents::AUDIO_FRAME_BUFFERED)
                 .unwrap();
 
             match &mut ch {

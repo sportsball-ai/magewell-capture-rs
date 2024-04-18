@@ -2,7 +2,9 @@ use super::{sys, AudioSignalStatus, ChannelInfo, Result, VideoSignalStatus};
 use snafu::prelude::*;
 use std::{ffi::c_void, mem::MaybeUninit};
 
-pub trait UniversalCaptureFamily {
+/// # Safety
+/// The pointers returned by implementations of this trait must be valid.
+pub unsafe trait UniversalCaptureFamilyChannel {
     fn handle(&self) -> *mut c_void;
 
     fn info(&self) -> &ChannelInfo;

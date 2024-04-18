@@ -1,4 +1,5 @@
 use super::sys;
+use bitflags::bitflags;
 use std::{ffi::CStr, os::raw::c_char, time::Duration};
 
 fn bytes_to_cstr(bytes: &[c_char]) -> &CStr {
@@ -245,5 +246,29 @@ impl AudioCaptureFrame {
 impl From<sys::_MWCAP_AUDIO_CAPTURE_FRAME> for AudioCaptureFrame {
     fn from(frame: sys::_MWCAP_AUDIO_CAPTURE_FRAME) -> Self {
         AudioCaptureFrame { inner: frame }
+    }
+}
+
+bitflags! {
+    pub struct NotifyEvents: u32 {
+        const INPUT_SORUCE_START_SCAN = 1;
+        const INPUT_SORUCE_STOP_SCAN = 2;
+        const INPUT_SORUCE_SCAN_CHANGE = 3;
+        const VIDEO_INPUT_SOURCE_CHANGE = 4;
+        const AUDIO_INPUT_SOURCE_CHANGE = 8;
+        const INPUT_SPECIFIC_CHANGE = 16;
+        const VIDEO_SIGNAL_CHANGE = 32;
+        const AUDIO_SIGNAL_CHANGE = 64;
+        const VIDEO_FIELD_BUFFERING = 128;
+        const VIDEO_FRAME_BUFFERING = 256;
+        const VIDEO_FIELD_BUFFERED = 512;
+        const VIDEO_FRAME_BUFFERED = 1024;
+        const VIDEO_SMPTE_TIME_CODE = 2048;
+        const AUDIO_FRAME_BUFFERED = 4096;
+        const AUDIO_INPUT_RESET = 8192;
+        const VIDEO_SAMPLING_PHASE_CHANGE = 16384;
+        const LOOP_THROUGH_CHANGED = 32768;
+        const LOOP_THROUGH_EDID_CHANGED = 65536;
+        const NEW_SDI_ANC_PACKET = 131072;
     }
 }

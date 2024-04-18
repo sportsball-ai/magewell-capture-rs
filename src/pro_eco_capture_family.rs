@@ -1,8 +1,13 @@
-use super::{sys, AudioCaptureFrame, Result, UniversalCaptureFamily};
+use super::{sys, AudioCaptureFrame, NotifyEvents, Result, UniversalCaptureFamilyChannel};
 use snafu::prelude::*;
 use std::{os::raw::c_longlong, time::Duration};
 
-pub trait ProEcoCaptureFamily: UniversalCaptureFamily {
+#[derive(Clone, Copy)]
+pub struct NotifyHandle(sys::MWCAP_PTR);
+
+/// # Safety
+/// The pointers returned by implementations of this trait must be valid.
+pub unsafe trait ProEcoCaptureFamilyChannel: UniversalCaptureFamilyChannel {
     fn event(&self) -> sys::MWCAP_PTR;
 
     fn get_device_time(&self) -> Result<Duration> {
@@ -20,19 +25,19 @@ pub trait ProEcoCaptureFamily: UniversalCaptureFamily {
     /// Causes `wait` to return any time the specified events (e.g.
     /// `MWCAP_NOTIFY_AUDIO_FRAME_BUFFERED`) occur. Returns a handle that can be used to
     /// unregister.
-    fn register_notify(&self, events: u32) -> Result<sys::MWCAP_PTR> {
+    fn register_notify(&self, events: NotifyEvents) -> Result<NotifyHandle> {
         Ok(unsafe {
-            let handle = sys::MWRegisterNotify(self.handle(), self.event(), events);
+            let handle = sys::MWRegisterNotify(self.handle(), self.event(), events.bits());
             if handle == 0 {
                 whatever!("unable to register notify");
             }
-            handle
+            NotifyHandle(handle)
         })
     }
 
-    fn unregister_notify(&self, handle: sys::MWCAP_PTR) -> Result<()> {
+    fn unregister_notify(&self, handle: NotifyHandle) -> Result<()> {
         unsafe {
-            if sys::MWUnregisterNotify(self.handle(), handle) != sys::_MW_RESULT__MW_SUCCEEDED {
+            if sys::MWUnregisterNotify(self.handle(), handle.0) != sys::_MW_RESULT__MW_SUCCEEDED {
                 whatever!("unable to unregister notify");
             }
         }

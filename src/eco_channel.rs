@@ -1,6 +1,6 @@
 use super::{
     sys, ChannelHandle, ChannelInfo, EcoVideoCaptureFrame, EcoVideoCaptureStatus, FourCC,
-    ProEcoCaptureFamily, Result, UniversalCaptureFamily,
+    ProEcoCaptureFamilyChannel, Result, UniversalCaptureFamilyChannel,
 };
 use nix::sys::eventfd::EventFd;
 use snafu::prelude::*;
@@ -14,7 +14,7 @@ pub struct EcoChannel {
     video_capture_frame: Option<Pin<Box<EcoVideoCaptureFrame>>>,
 }
 
-impl UniversalCaptureFamily for EcoChannel {
+unsafe impl UniversalCaptureFamilyChannel for EcoChannel {
     fn handle(&self) -> *mut c_void {
         *self.handle
     }
@@ -24,7 +24,7 @@ impl UniversalCaptureFamily for EcoChannel {
     }
 }
 
-impl ProEcoCaptureFamily for EcoChannel {
+unsafe impl ProEcoCaptureFamilyChannel for EcoChannel {
     fn event(&self) -> sys::MWCAP_PTR {
         self.event_fd.as_raw_fd() as _
     }

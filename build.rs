@@ -36,7 +36,7 @@ fn main() {
 
     println!("cargo:rustc-link-lib=stdc++");
 
-    if env::var("CARGO_FEATURE_NO_DEPS").is_ok() {
+    if env::var("CARGO_FEATURE_DEP_STUBS").is_ok() {
         // Strip libusb from the build so we can stub it out.
         Command::new("ar")
             .args([
