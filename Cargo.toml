@@ -4,6 +4,12 @@ version = "0.0.0"
 edition = "2021"
 build = "build.rs"
 
+[features]
+default = []
+
+# If no-deps is enabled, the build will be stripped down to avoid any dependency on v4l2, udev, or asound.
+no-deps = []
+
 [dependencies]
 snafu = "0.8.0"
 nix = { version = "0.28", features = ["event"] }
