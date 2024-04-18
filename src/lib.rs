@@ -243,8 +243,12 @@ mod tests {
                 Channel::Eco(ch) => {
                     for _ in 0..5 {
                         ch.wait().unwrap();
-                        assert!(ch.capture_audio_frame(&mut audio_frame).unwrap());
-                        assert!(audio_frame.timestamp() > start_time);
+                        let mut count = 0;
+                        while ch.capture_audio_frame(&mut audio_frame).unwrap() {
+                            count += 1;
+                            assert!(audio_frame.timestamp() > start_time);
+                        }
+                        assert!(count > 0);
                     }
                 }
                 _ => {

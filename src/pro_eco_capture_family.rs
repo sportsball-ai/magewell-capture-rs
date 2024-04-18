@@ -63,12 +63,11 @@ pub trait ProEcoCaptureFamily: UniversalCaptureFamily {
     fn capture_audio_frame(&mut self, frame: &mut AudioCaptureFrame) -> Result<bool> {
         frame.inner.dwSyncCode = 0;
         unsafe {
-            if sys::MWCaptureAudioFrame(self.handle(), &mut frame.inner as _)
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to capture audio frame");
+            match sys::MWCaptureAudioFrame(self.handle(), &mut frame.inner as _) {
+                sys::_MW_RESULT__MW_SUCCEEDED => Ok(frame.inner.dwSyncCode != 0),
+                sys::_MW_RESULT__MW_ENODATA => Ok(false),
+                _ => whatever!("unable to capture audio frame"),
             }
         }
-        Ok(frame.inner.dwSyncCode != 0)
     }
 }
