@@ -1,15 +1,9 @@
-use nix::sys::eventfd::EventFd;
 use snafu::prelude::*;
 use std::{
     mem::MaybeUninit,
     ops::Deref,
-    os::{
-        fd::AsRawFd,
-        raw::{c_longlong, c_void},
-    },
-    pin::Pin,
+    os::raw::c_void,
     sync::{Mutex, OnceLock},
-    time::Duration,
 };
 
 pub mod sys {
@@ -23,8 +17,23 @@ pub mod sys {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+#[cfg(feature = "dep-stubs")]
+mod dep_stubs;
+
 mod fourcc;
 pub use fourcc::*;
+
+mod eco_channel;
+pub use eco_channel::*;
+
+mod pro_channel;
+pub use pro_channel::*;
+
+mod universal_capture_family;
+pub use universal_capture_family::*;
+
+mod pro_eco_capture_family;
+pub use pro_eco_capture_family::*;
 
 // Contains simple wrappers around the Magewell SDK types.
 mod types;
@@ -140,52 +149,14 @@ impl Channel {
         };
 
         Ok(if info.family_name().to_str() == Ok("Eco Capture") {
-            let event_fd = EventFd::new().whatever_context("unable to create eventfd")?;
-            Channel::Eco(EcoChannel {
-                handle,
-                info,
-                event_fd,
-                video_capture_frame: None,
-            })
+            Channel::Eco(EcoChannel::new(handle, info)?)
         } else {
-            Channel::Pro(ProChannel { handle, info })
+            Channel::Pro(ProChannel::new(handle, info)?)
         })
     }
 }
 
-pub trait UniversalCaptureFamily {
-    fn handle(&self) -> *mut c_void;
-
-    fn info(&self) -> &ChannelInfo;
-
-    fn get_video_signal_status(&self) -> Result<VideoSignalStatus> {
-        let mut status = MaybeUninit::uninit();
-        unsafe {
-            if sys::MWGetVideoSignalStatus(self.handle(), status.as_mut_ptr())
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to get video signal status");
-            }
-            Ok(status.assume_init().into())
-        }
-    }
-}
-
-pub trait ProEcoCaptureFamily: UniversalCaptureFamily {
-    fn get_device_time(&self) -> Result<Duration> {
-        let mut time: c_longlong = 0;
-        unsafe {
-            if sys::MWGetDeviceTime(self.handle(), &mut time as *mut _)
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to get device time");
-            }
-            Ok(Duration::from_nanos(100 * time as u64))
-        }
-    }
-}
-
-impl UniversalCaptureFamily for Channel {
+unsafe impl UniversalCaptureFamilyChannel for Channel {
     fn handle(&self) -> *mut c_void {
         match self {
             Channel::Eco(ch) => ch.handle(),
@@ -201,119 +172,14 @@ impl UniversalCaptureFamily for Channel {
     }
 }
 
-pub struct EcoChannel {
-    handle: ChannelHandle,
-    info: ChannelInfo,
-    event_fd: EventFd,
-    // hold onto a reference of the currently set capture frame
-    video_capture_frame: Option<Pin<Box<EcoVideoCaptureFrame>>>,
-}
-
-impl UniversalCaptureFamily for EcoChannel {
-    fn handle(&self) -> *mut c_void {
-        *self.handle
-    }
-
-    fn info(&self) -> &ChannelInfo {
-        &self.info
+unsafe impl ProEcoCaptureFamilyChannel for Channel {
+    fn event(&self) -> sys::MWCAP_PTR {
+        match self {
+            Channel::Eco(ch) => ch.event(),
+            Channel::Pro(ch) => ch.event(),
+        }
     }
 }
-
-impl ProEcoCaptureFamily for EcoChannel {}
-
-impl EcoChannel {
-    pub fn start_video_capture(&mut self, width: u16, height: u16, format: FourCC) -> Result<()> {
-        let mut params = sys::_MWCAP_VIDEO_ECO_CAPTURE_OPEN {
-            cx: width as _,
-            cy: height as _,
-            dwFOURCC: format.as_u32(),
-            llFrameDuration: -1,
-            hEvent: self.event_fd.as_raw_fd() as _,
-        };
-        unsafe {
-            if sys::MWStartVideoEcoCapture(self.handle(), &mut params as *mut _)
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to start video capture");
-            }
-        }
-        Ok(())
-    }
-
-    pub fn stop_video_capture(&mut self) -> Result<()> {
-        unsafe {
-            if sys::MWStopVideoEcoCapture(self.handle()) != sys::_MW_RESULT__MW_SUCCEEDED {
-                whatever!("unable to stop video capture");
-            }
-        }
-        Ok(())
-    }
-
-    pub fn set_video_capture_frame(&mut self, frame: EcoVideoCaptureFrame) -> Result<()> {
-        if self.video_capture_frame.is_some() {
-            whatever!("video frame already set");
-        }
-        let mut frame = Box::pin(frame);
-        unsafe {
-            if sys::MWCaptureSetVideoEcoFrame(self.handle(), frame.as_mut_ptr())
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to set video frame");
-            }
-        }
-        self.video_capture_frame = Some(frame);
-        Ok(())
-    }
-
-    pub fn get_video_capture_status(&mut self) -> Result<EcoVideoCaptureStatus> {
-        let status = unsafe {
-            let mut status = MaybeUninit::uninit();
-            if sys::MWGetVideoEcoCaptureStatus(self.handle(), status.as_mut_ptr())
-                != sys::_MW_RESULT__MW_SUCCEEDED
-            {
-                whatever!("unable to get video capture status");
-            }
-            status.assume_init()
-        };
-        Ok(EcoVideoCaptureStatus::new(
-            *Pin::into_inner(
-                self.video_capture_frame
-                    .take()
-                    .whatever_context("no video frame set")?,
-            ),
-            status,
-        ))
-    }
-
-    pub fn wait(&self) -> Result<()> {
-        if self
-            .event_fd
-            .read()
-            .whatever_context("unable to read eventfd")?
-            == 0
-        {
-            whatever!("error event received");
-        }
-        Ok(())
-    }
-}
-
-pub struct ProChannel {
-    handle: ChannelHandle,
-    info: ChannelInfo,
-}
-
-impl UniversalCaptureFamily for ProChannel {
-    fn handle(&self) -> *mut c_void {
-        *self.handle
-    }
-
-    fn info(&self) -> &ChannelInfo {
-        &self.info
-    }
-}
-
-impl ProEcoCaptureFamily for ProChannel {}
 
 // Theses tests will pass if there are no devices present, but to really get their full value, an
 // Eco device should be present and channel 0:0 should be connected to a video source.
@@ -344,7 +210,17 @@ mod tests {
             return;
         }
 
-        let ch = Channel::open(0, 0).unwrap();
+        let mut ch = Channel::open(0, 0).unwrap();
+
+        let start_time = ch.get_device_time().unwrap();
+
+        let audio_status = ch.get_audio_signal_status().unwrap();
+        println!(
+            "audio channels = {}, bit depth = {}, sample rate = {}",
+            audio_status.channel_count(),
+            audio_status.bits_per_sample(),
+            audio_status.sample_rate(),
+        );
 
         let video_status = ch.get_video_signal_status().unwrap();
         println!(
@@ -355,9 +231,39 @@ mod tests {
             video_status.frame_duration(),
         );
 
+        // Try capturing some audio.
+        let mut audio_frame = AudioCaptureFrame::default();
+        {
+            ch.start_audio_capture().unwrap();
+            let notify_handle = ch
+                .register_notify(NotifyEvents::AUDIO_FRAME_BUFFERED)
+                .unwrap();
+
+            match &mut ch {
+                Channel::Eco(ch) => {
+                    for _ in 0..5 {
+                        ch.wait().unwrap();
+                        let mut count = 0;
+                        while ch.capture_audio_frame(&mut audio_frame).unwrap() {
+                            count += 1;
+                            assert!(audio_frame.timestamp() > start_time);
+                        }
+                        assert!(count > 0);
+                    }
+                }
+                _ => {
+                    // TODO: support pro devices better?
+                    panic!("expected channel type");
+                }
+            }
+
+            ch.unregister_notify(notify_handle).unwrap();
+            ch.stop_audio_capture().unwrap();
+        }
+
+        // Try capturing some video.
         match ch {
             Channel::Eco(mut ch) => {
-                let start_time = ch.get_device_time().unwrap();
                 let format = FourCC::new('B', 'G', 'R', ' ');
                 let stride = format.min_stride(video_status.image_width(), 4);
                 let image_size = format.image_size(
@@ -377,10 +283,13 @@ mod tests {
 
                 for _ in 0..5 {
                     ch.set_video_capture_frame(frame).unwrap();
-                    ch.wait().unwrap();
-                    let status = ch.get_video_capture_status().unwrap();
-                    assert!(status.timestamp() > start_time);
-                    frame = status.into_frame();
+                    frame = loop {
+                        ch.wait().unwrap();
+                        if let Some(status) = ch.get_video_capture_status().unwrap() {
+                            assert!(status.timestamp() > start_time);
+                            break status.into_frame();
+                        }
+                    }
                 }
 
                 ch.stop_video_capture().unwrap();

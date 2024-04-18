@@ -1,4 +1,5 @@
 use super::sys;
+use bitflags::bitflags;
 use std::{ffi::CStr, os::raw::c_char, time::Duration};
 
 fn bytes_to_cstr(bytes: &[c_char]) -> &CStr {
@@ -87,6 +88,34 @@ impl From<sys::MWCAP_VIDEO_SIGNAL_STATE> for VideoSignalState {
     }
 }
 
+pub struct AudioSignalStatus {
+    inner: sys::MWCAP_AUDIO_SIGNAL_STATUS,
+}
+
+impl AudioSignalStatus {
+    pub fn is_lpcm(&self) -> bool {
+        self.inner.bLPCM != 0
+    }
+
+    pub fn channel_count(&self) -> u32 {
+        self.inner.wChannelValid.count_ones() * 2
+    }
+
+    pub fn bits_per_sample(&self) -> u8 {
+        self.inner.cBitsPerSample
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.inner.dwSampleRate
+    }
+}
+
+impl From<sys::MWCAP_AUDIO_SIGNAL_STATUS> for AudioSignalStatus {
+    fn from(status: sys::MWCAP_AUDIO_SIGNAL_STATUS) -> Self {
+        AudioSignalStatus { inner: status }
+    }
+}
+
 pub struct VideoSignalStatus {
     inner: sys::MWCAP_VIDEO_SIGNAL_STATUS,
 }
@@ -169,5 +198,77 @@ impl EcoVideoCaptureStatus {
 
     pub fn timestamp(&self) -> Duration {
         Duration::from_nanos(100 * self.status.llTimestamp as u64)
+    }
+}
+
+pub struct AudioCaptureFrame {
+    pub(crate) inner: sys::_MWCAP_AUDIO_CAPTURE_FRAME,
+}
+
+impl Default for AudioCaptureFrame {
+    fn default() -> Self {
+        Self {
+            inner: sys::_MWCAP_AUDIO_CAPTURE_FRAME {
+                iFrame: 0,
+                dwReserved: 0,
+                dwSyncCode: 0,
+                cFrameCount: 0,
+                llTimestamp: 0,
+                adwSamples: [0; (sys::MWCAP_AUDIO_SAMPLES_PER_FRAME
+                    * sys::MWCAP_AUDIO_MAX_NUM_CHANNELS) as _],
+            },
+        }
+    }
+}
+
+// In the future, this can be replaced with `ptr.is_aligned()`.
+fn is_aligned<T>(ptr: *const T) -> bool {
+    ptr.align_offset(std::mem::align_of::<T>()) == 0
+}
+
+impl AudioCaptureFrame {
+    /// For LPCM, the channel order is 0L, 1L, 2L, 3L, 0R, 1R, 2R, 3R.
+    pub fn samples(&self) -> &[u32] {
+        // We have to do this in a slightly round-about way to appease the compiler, which
+        // otherwise complains about the possibility of `adwSamples` being unaligned (even though
+        // it always is).
+        let ptr = std::ptr::addr_of!(self.inner.adwSamples);
+        // Proof that our alignment is fine:
+        assert!(is_aligned(ptr));
+        unsafe { (*ptr).as_slice() }
+    }
+
+    pub fn timestamp(&self) -> Duration {
+        Duration::from_nanos(100 * self.inner.llTimestamp as u64)
+    }
+}
+
+impl From<sys::_MWCAP_AUDIO_CAPTURE_FRAME> for AudioCaptureFrame {
+    fn from(frame: sys::_MWCAP_AUDIO_CAPTURE_FRAME) -> Self {
+        AudioCaptureFrame { inner: frame }
+    }
+}
+
+bitflags! {
+    pub struct NotifyEvents: u32 {
+        const INPUT_SORUCE_START_SCAN = 1;
+        const INPUT_SORUCE_STOP_SCAN = 2;
+        const INPUT_SORUCE_SCAN_CHANGE = 3;
+        const VIDEO_INPUT_SOURCE_CHANGE = 4;
+        const AUDIO_INPUT_SOURCE_CHANGE = 8;
+        const INPUT_SPECIFIC_CHANGE = 16;
+        const VIDEO_SIGNAL_CHANGE = 32;
+        const AUDIO_SIGNAL_CHANGE = 64;
+        const VIDEO_FIELD_BUFFERING = 128;
+        const VIDEO_FRAME_BUFFERING = 256;
+        const VIDEO_FIELD_BUFFERED = 512;
+        const VIDEO_FRAME_BUFFERED = 1024;
+        const VIDEO_SMPTE_TIME_CODE = 2048;
+        const AUDIO_FRAME_BUFFERED = 4096;
+        const AUDIO_INPUT_RESET = 8192;
+        const VIDEO_SAMPLING_PHASE_CHANGE = 16384;
+        const LOOP_THROUGH_CHANGED = 32768;
+        const LOOP_THROUGH_EDID_CHANGED = 65536;
+        const NEW_SDI_ANC_PACKET = 131072;
     }
 }

@@ -4,9 +4,17 @@ version = "0.0.0"
 edition = "2021"
 build = "build.rs"
 
+[features]
+default = []
+
+# If dep-stubs is enabled, the build will avoid any dependency on v4l2, udev,
+# or asound by building in non-functional stubs.
+dep-stubs = []
+
 [dependencies]
 snafu = "0.8.0"
 nix = { version = "0.28", features = ["event"] }
+bitflags = "2.5.0"
 
 [build-dependencies]
 # We're very permissive here with bindgen due to https://github.com/rust-lang/cargo/issues/5237

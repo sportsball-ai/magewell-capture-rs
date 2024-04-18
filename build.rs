@@ -1,7 +1,7 @@
 extern crate bindgen;
 extern crate cc;
 
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf, process::Command};
 
 const SDK_PATH: &str = "vendor/Magewell_Capture_SDK_Linux_3.3.1.1313";
 
@@ -23,13 +23,40 @@ fn main() {
         }
     );
 
-    println!("cargo:rustc-link-search={}", vendor_lib_path);
+    let lib_path = out_path.join("lib");
+    fs::create_dir_all(&lib_path).unwrap();
+    fs::copy(
+        format!("{}/libMWCapture.a", vendor_lib_path),
+        lib_path.join("libMWCapture.a"),
+    )
+    .unwrap();
+
+    println!("cargo:rustc-link-search={}", lib_path.display());
     println!("cargo:rustc-link-lib=static=MWCapture");
 
     println!("cargo:rustc-link-lib=stdc++");
-    println!("cargo:rustc-link-lib=v4l2");
-    println!("cargo:rustc-link-lib=asound");
-    println!("cargo:rustc-link-lib=udev");
+
+    if env::var("CARGO_FEATURE_DEP_STUBS").is_ok() {
+        // Strip libusb from the build so we can stub it out.
+        Command::new("ar")
+            .args([
+                "d",
+                lib_path.join("libMWCapture.a").to_str().unwrap(),
+                "libusb_1_0_la-linux_udev.o",
+                "libusb_1_0_la-linux_usbfs.o",
+                "libusb_1_0_la-core.o",
+                "libusb_1_0_la-io.o",
+                "libusb_1_0_la-hotplug.o",
+                "libusb_1_0_la-descriptor.o",
+                "libusb_1_0_la-sync.o",
+            ])
+            .status()
+            .expect("failed to remove libudev.a from libMWCapture.a");
+    } else {
+        println!("cargo:rustc-link-lib=v4l2");
+        println!("cargo:rustc-link-lib=asound");
+        println!("cargo:rustc-link-lib=udev");
+    }
 
     cc::Build::new()
         .include(format!("{}/Include", SDK_PATH))
@@ -40,6 +67,7 @@ fn main() {
         .clang_arg(format!("-I{}/Include", SDK_PATH))
         .header("src/lib.hpp")
         .allowlist_function("MW.+")
+        .allowlist_var("MW.+")
         .generate()
         .expect("unable to generate bindings");
 
