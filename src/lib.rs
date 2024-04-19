@@ -39,8 +39,18 @@ pub use pro_eco_capture_family::*;
 mod types;
 pub use types::*;
 
-// The Magewell SDK doesn't really give us error codes, so we just use "whatever".
-pub type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
+#[derive(Debug, Snafu)]
+pub enum Error {
+    // The Magewell SDK doesn't really give us error codes, so we just use "whatever".
+    #[snafu(whatever, display("{message}"))]
+    Whatever {
+        message: String,
+        #[snafu(source(from(Box<dyn std::error::Error + Send + Sync>, Some)))]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 static INIT_ONCE: OnceLock<bool> = OnceLock::new();
 
@@ -63,7 +73,7 @@ pub fn get_channel_info() -> Result<Vec<ChannelInfo>> {
 
     let _lock = DEVICE_LIST_MUTEX
         .lock()
-        .whatever_context("unable to lock device list")?;
+        .expect("the lock must never be poisoned");
 
     unsafe {
         if sys::MWRefreshDevice() != sys::_MW_RESULT__MW_SUCCEEDED {
@@ -121,7 +131,7 @@ impl Channel {
         let handle = {
             let _lock = DEVICE_LIST_MUTEX
                 .lock()
-                .whatever_context("unable to lock device list")?;
+                .expect("the lock must never be poisoned");
 
             unsafe {
                 if sys::MWRefreshDevice() != sys::_MW_RESULT__MW_SUCCEEDED {
